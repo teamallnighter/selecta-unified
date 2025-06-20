@@ -25,6 +25,8 @@ jobs:
         # Install system audio libraries
         brew install portaudio
         brew install libsndfile
+        # Ensure Python has tkinter support (usually included with macOS Python)
+        python -c "import tkinter; print('tkinter is available')"
 
     - name: Cache Python packages
       uses: actions/cache@v4
@@ -109,6 +111,8 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        # Verify tkinter is available (should be included with Windows Python)
+        python -c "import tkinter; print('tkinter is available')"
 
     - name: Create Windows icon from PNG
       run: |
