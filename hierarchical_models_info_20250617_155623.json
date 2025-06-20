@@ -1,0 +1,34 @@
+{
+  "strategy": "cascade",
+  "category_structure": {
+    "melodic": [
+      "instrument",
+      "synth"
+    ],
+    "vocals": [
+      "spoken",
+      "sung"
+    ],
+    "bass": [
+      "heavy_bass",
+      "basses",
+      "808"
+    ],
+    "percussive": [
+      "kick",
+      "percs",
+      "snare",
+      "cymbol"
+    ]
+  },
+  "timestamp": "20250617_155623",
+  "main_model_file": "hierarchical_main_model_20250617_155623.pkl",
+  "sub_model_vocals": "hierarchical_sub_vocals_model_20250617_155623.pkl",
+  "sub_model_percussive": "hierarchical_sub_percussive_model_20250617_155623.pkl",
+  "scaler_main": "hierarchical_scaler_main_20250617_155623.pkl",
+  "scaler_vocals": "hierarchical_scaler_vocals_20250617_155623.pkl",
+  "scaler_percussive": "hierarchical_scaler_percussive_20250617_155623.pkl",
+  "le_main": "hierarchical_le_main_20250617_155623.pkl",
+  "le_vocals": "hierarchical_le_vocals_20250617_155623.pkl",
+  "le_percussive": "hierarchical_le_percussive_20250617_155623.pkl"
+}

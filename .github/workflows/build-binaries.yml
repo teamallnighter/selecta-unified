@@ -1,0 +1,313 @@
+name: Build Selecta Unified Binaries
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'  # Use 3.11 for better compatibility
+
+    - name: Install system dependencies (macOS)
+      run: |
+        # Install system audio libraries
+        brew install portaudio
+        brew install libsndfile
+
+    - name: Cache Python packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create icon from PNG (macOS)
+      run: |
+        mkdir -p assets/logo/selecta.iconset
+        # Create all required icon sizes
+        sips -z 16 16 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_16x16.png
+        sips -z 32 32 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_16x16@2x.png
+        sips -z 32 32 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_32x32.png
+        sips -z 64 64 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_32x32@2x.png
+        sips -z 128 128 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_128x128.png
+        sips -z 256 256 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_128x128@2x.png
+        sips -z 256 256 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_256x256.png
+        sips -z 512 512 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_256x256@2x.png
+        sips -z 512 512 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_512x512.png
+        sips -z 1024 1024 assets/logo/selecta.png --out assets/logo/selecta.iconset/icon_512x512@2x.png
+        # Create .icns file
+        iconutil -c icns assets/logo/selecta.iconset
+
+    - name: Build macOS binary
+      run: |
+        pyinstaller selecta_unified.spec --clean --noconfirm
+
+    - name: Create macOS DMG
+      run: |
+        # Install create-dmg
+        brew install create-dmg
+        
+        # Create DMG
+        create-dmg \
+          --volname "Selecta Unified" \
+          --volicon "assets/logo/selecta.icns" \
+          --window-pos 200 120 \
+          --window-size 600 300 \
+          --icon-size 100 \
+          --icon "Selecta Unified.app" 175 120 \
+          --hide-extension "Selecta Unified.app" \
+          --app-drop-link 425 120 \
+          "SelectaUnified-macOS.dmg" \
+          "dist/"
+
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: selecta-unified-macos
+        path: |
+          SelectaUnified-macOS.dmg
+          dist/Selecta Unified.app
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Cache Python packages
+      uses: actions/cache@v3
+      with:
+        path: ~\AppData\Local\pip\Cache
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create Windows icon from PNG
+      run: |
+        # Install Pillow for image conversion
+        pip install Pillow
+        python -c "
+        from PIL import Image
+        import os
+        
+        # Create assets/logo directory if it doesn't exist
+        os.makedirs('assets/logo', exist_ok=True)
+        
+        # Convert PNG to ICO for Windows
+        img = Image.open('assets/logo/selecta.png')
+        
+        # Create multiple sizes for ICO
+        sizes = [(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)]
+        img.save('assets/logo/selecta.ico', format='ICO', sizes=sizes)
+        print('Created selecta.ico for Windows')
+        "
+
+    - name: Create Windows spec file
+      run: |
+        python -c "
+        import os
+        
+        # Read the original spec file and modify for Windows
+        with open('selecta_unified.spec', 'r') as f:
+            content = f.read()
+        
+        # Replace .icns with .ico for Windows
+        content = content.replace('assets/logo/selecta.icns', 'assets/logo/selecta.ico')
+        
+        # Write Windows spec file
+        with open('selecta_unified_windows.spec', 'w') as f:
+            f.write(content)
+        
+        print('Created Windows spec file')
+        "
+
+    - name: Build Windows binary
+      run: |
+        pyinstaller selecta_unified_windows.spec --clean --noconfirm
+
+    - name: Create Windows installer (NSIS)
+      run: |
+        # Create NSIS installer script
+        $nsis_script = @"
+        !define APP_NAME `"Selecta Unified`"
+        !define APP_VERSION `"1.0.0`"
+        !define APP_PUBLISHER `"Selecta Audio`"
+        !define APP_URL `"https://github.com/your-username/selecta-unified`"
+        !define APP_SUPPORT_URL `"https://github.com/your-username/selecta-unified/issues`"
+        !define APP_UPDATES_URL `"https://github.com/your-username/selecta-unified/releases`"
+        !define MAIN_APP_EXE `"SelectaUnified.exe`"
+        !define INSTALL_DIR `"`$PROGRAMFILES64\Selecta Unified`"
+        !define MAIN_APP_REGKEY `"Software\Selecta Unified`"
+        !define MAIN_APP_REGKEY_UNINSTALL `"Software\Microsoft\Windows\CurrentVersion\Uninstall\Selecta Unified`"
+        
+        SetCompressor /SOLID lzma
+        Name `"`${APP_NAME}`"
+        OutFile `"SelectaUnified-Windows-Installer.exe`"
+        BrandingText `"`${APP_NAME} `${APP_VERSION}`"
+        InstallDirRegKey HKLM `"`${MAIN_APP_REGKEY}`" `"InstallLocation`"
+        InstallDir `"`${INSTALL_DIR}`"
+        
+        !include LogicLib.nsh
+        !include MUI2.nsh
+        
+        !define MUI_ABORTWARNING
+        !define MUI_UNABORTWARNING
+        
+        !insertmacro MUI_PAGE_WELCOME
+        !insertmacro MUI_PAGE_LICENSE `"LICENSE`"
+        !insertmacro MUI_PAGE_DIRECTORY
+        !insertmacro MUI_PAGE_INSTFILES
+        !insertmacro MUI_PAGE_FINISH
+        
+        !insertmacro MUI_UNPAGE_WELCOME
+        !insertmacro MUI_UNPAGE_CONFIRM
+        !insertmacro MUI_UNPAGE_INSTFILES
+        !insertmacro MUI_UNPAGE_FINISH
+        
+        !insertmacro MUI_LANGUAGE `"English`"
+        
+        Section `"Main Application`" SEC01
+          SetOutPath `"`$INSTDIR`"
+          SetOverwrite ifnewer
+          File /r `"dist\SelectaUnified\*`"
+          CreateShortCut `"`$DESKTOP\Selecta Unified.lnk`" `"`$INSTDIR\`${MAIN_APP_EXE}`"
+          CreateDirectory `"`$SMPROGRAMS\Selecta Unified`"
+          CreateShortCut `"`$SMPROGRAMS\Selecta Unified\Selecta Unified.lnk`" `"`$INSTDIR\`${MAIN_APP_EXE}`"
+          CreateShortCut `"`$SMPROGRAMS\Selecta Unified\Uninstall Selecta Unified.lnk`" `"`$INSTDIR\uninstall.exe`"
+        SectionEnd
+        
+        Section -AdditionalIcons
+          WriteIniStr `"`$INSTDIR\`${APP_NAME}.url`" `"InternetShortcut`" `"URL`" `"`${APP_URL}`"
+          CreateShortCut `"`$SMPROGRAMS\Selecta Unified\Website.lnk`" `"`$INSTDIR\`${APP_NAME}.url`"
+          CreateShortCut `"`$SMPROGRAMS\Selecta Unified\Uninstall.lnk`" `"`$INSTDIR\uninstall.exe`"
+        SectionEnd
+        
+        Section -Post
+          WriteUninstaller `"`$INSTDIR\uninstall.exe`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY}`" `"InstallLocation`" `"`$INSTDIR`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"DisplayName`" `"`${APP_NAME}`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"UninstallString`" `"`$INSTDIR\uninstall.exe`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"InstallLocation`" `"`$INSTDIR`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"DisplayIcon`" `"`$INSTDIR\`${MAIN_APP_EXE}`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"Publisher`" `"`${APP_PUBLISHER}`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"HelpLink`" `"`${APP_SUPPORT_URL}`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"URLUpdateInfo`" `"`${APP_UPDATES_URL}`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"URLInfoAbout`" `"`${APP_URL}`"
+          WriteRegStr HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"DisplayVersion`" `"`${APP_VERSION}`"
+          WriteRegDWORD HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"NoModify`" 1
+          WriteRegDWORD HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`" `"NoRepair`" 1
+        SectionEnd
+        
+        Section Uninstall
+          Delete `"`$INSTDIR\`${APP_NAME}.url`"
+          Delete `"`$INSTDIR\uninstall.exe`"
+          
+          Delete `"`$SMPROGRAMS\Selecta Unified\Uninstall.lnk`"
+          Delete `"`$SMPROGRAMS\Selecta Unified\Website.lnk`"
+          Delete `"`$DESKTOP\Selecta Unified.lnk`"
+          Delete `"`$SMPROGRAMS\Selecta Unified\Selecta Unified.lnk`"
+          
+          RMDir `"`$SMPROGRAMS\Selecta Unified`"
+          
+          RMDir /r `"`$INSTDIR`"
+          
+          DeleteRegKey HKLM `"`${MAIN_APP_REGKEY_UNINSTALL}`"
+          DeleteRegKey HKLM `"`${MAIN_APP_REGKEY}`"
+          
+          SetAutoClose true
+        SectionEnd
+        "@
+        
+        # Create LICENSE file if it doesn't exist
+        if (!(Test-Path LICENSE)) {
+          @"
+        MIT License
+        
+        Copyright (c) 2025 Selecta Audio
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the `"Software`"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED `"AS IS`", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        "@ | Out-File -FilePath LICENSE -Encoding UTF8
+        }
+        
+        # Write NSIS script
+        $nsis_script | Out-File -FilePath installer.nsi -Encoding UTF8
+        
+        # Download and install NSIS
+        Invoke-WebRequest -Uri "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.08/nsis-3.08-setup.exe" -OutFile "nsis-setup.exe"
+        Start-Process -FilePath "nsis-setup.exe" -ArgumentList "/S" -Wait
+        
+        # Build installer
+        & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: selecta-unified-windows
+        path: |
+          SelectaUnified-Windows-Installer.exe
+          dist/SelectaUnified/
+
+  create-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          selecta-unified-macos/SelectaUnified-macOS.dmg
+          selecta-unified-windows/SelectaUnified-Windows-Installer.exe
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
