@@ -280,9 +280,13 @@ jobs:
         # Write NSIS script
         $nsis_script | Out-File -FilePath installer.nsi -Encoding UTF8
         
-        # Download and install NSIS
-        Invoke-WebRequest -Uri "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.08/nsis-3.08-setup.exe" -OutFile "nsis-setup.exe"
-        Start-Process -FilePath "nsis-setup.exe" -ArgumentList "/S" -Wait
+        # Install NSIS using Chocolatey (more reliable on GitHub Actions)
+        choco install nsis -y
+        
+        # Verify NSIS is installed
+        if (!(Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            throw "NSIS installation failed - makensis.exe not found"
+        }
         
         # Build installer
         & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
